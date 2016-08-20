@@ -9,7 +9,7 @@ import caffe
 import numpy as np
 import yaml
 from fast_rcnn.config import cfg
-from generate_anchors import generate_anchors
+from rpn.generate_anchors import generate_anchors
 from fast_rcnn.bbox_transform import bbox_transform_inv, clip_boxes
 from fast_rcnn.nms_wrapper import nms
 
@@ -20,10 +20,17 @@ class ProposalLayer(caffe.Layer):
     Outputs object detection proposals by applying estimated bounding-box
     transformations to a set of regular boxes (called "anchors").
     """
+    def get_phase(self):
+	if self.phase == 0:
+		return 'TRAIN'
+	elif self.phase == 1:
+		return 'TEST'
+	else:
+		raise ValueError("Unknown Phase")
 
     def setup(self, bottom, top):
         # parse the layer parameter string, which must be valid YAML
-        layer_params = yaml.load(self.param_str_)
+        layer_params = yaml.load(self.param_str)
 
         self._feat_stride = layer_params['feat_stride']
         anchor_scales = layer_params.get('scales', (8, 16, 32))
@@ -61,7 +68,7 @@ class ProposalLayer(caffe.Layer):
         assert bottom[0].data.shape[0] == 1, \
             'Only single item batches are supported'
 
-        cfg_key = str(self.phase) # either 'TRAIN' or 'TEST'
+        cfg_key = self.get_phase() # either 'TRAIN' or 'TEST'
         pre_nms_topN  = cfg[cfg_key].RPN_PRE_NMS_TOP_N
         post_nms_topN = cfg[cfg_key].RPN_POST_NMS_TOP_N
         nms_thresh    = cfg[cfg_key].RPN_NMS_THRESH
