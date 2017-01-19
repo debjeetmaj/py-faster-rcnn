@@ -1,30 +1,28 @@
 # --------------------------------------------------------
-# Fast R-CNN
-# Copyright (c) 2015 Microsoft
-# Licensed under The MIT License [see LICENSE for details]
-# Written by Ross Girshick
+# Written by Debjeet Majumdar
 # --------------------------------------------------------
-
 """The data layer used during training to train a Fast R-CNN network.
 
-RoIDataLayer implements a Caffe Python layer.
+RoiDualDataLayer implements a Caffe Python layer.
 """
 
 import caffe
 from fast_rcnn.config import cfg
 from roi_data_layer.minibatch import get_minibatch
+from roi_data_layer.layer import BlobFetcher
 import numpy as np
 import yaml
 from multiprocessing import Process, Queue
 
-class RoIDataLayer(caffe.Layer):
+class RoIDualDataLayer(caffe.Layer):
     """Fast R-CNN data layer used for training."""
 
-    def _shuffle_roidb_inds(self):
-        """Randomly permute the training roidb."""
+    def _shuffle_roidb_inds(self,i):
+        """Randomly permute the training roidbs."""
+        self._cur[i] = 0
         if cfg.TRAIN.ASPECT_GROUPING:
-            widths = np.array([r['width'] for r in self._roidb])
-            heights = np.array([r['height'] for r in self._roidb])
+            widths = np.array([r['width'] for r in self._roidbs[i]])
+            heights = np.array([r['height'] for r in self._roidbs[i]])
             horz = (widths >= heights)
             vert = np.logical_not(horz)
             horz_inds = np.where(horz)[0]
@@ -34,19 +32,18 @@ class RoIDataLayer(caffe.Layer):
                 np.random.permutation(vert_inds)))
             inds = np.reshape(inds, (-1, 2))
             row_perm = np.random.permutation(np.arange(inds.shape[0]))
-            inds = np.reshape(inds[row_perm, :], (-1,))
-            self._perm = inds
+            self._perm[i] = np.reshape(inds[row_perm, :], (-1,))
         else:
-            self._perm = np.random.permutation(np.arange(len(self._roidb)))
-        self._cur = 0
-
+            self._perm[i] = np.random.permutation(np.arange(len(self._roidbs[i])))
+        
     def _get_next_minibatch_inds(self):
         """Return the roidb indices for the next minibatch."""
-        if self._cur + cfg.TRAIN.IMS_PER_BATCH >= len(self._roidb):
-            self._shuffle_roidb_inds()
+        
+        if self._cur[self._cur_roidb_index] + cfg.TRAIN.IMS_PER_BATCH >= len(self._roidbs[self._cur_roidb_index]):
+            self._shuffle_roidb_inds(self._cur_roidb_index)
 
-        db_inds = self._perm[self._cur:self._cur + cfg.TRAIN.IMS_PER_BATCH]
-        self._cur += cfg.TRAIN.IMS_PER_BATCH
+        db_inds = self._perm[self._cur_roidb_index][self._cur[self._cur_roidb_index]:self._cur[self._cur_roidb_index] + cfg.TRAIN.IMS_PER_BATCH]
+        self._cur[self._cur_roidb_index] += cfg.TRAIN.IMS_PER_BATCH
         return db_inds
 
     def _get_next_minibatch(self):
@@ -56,32 +53,46 @@ class RoIDataLayer(caffe.Layer):
         separate process and made available through self._blob_queue.
         """
         if cfg.TRAIN.USE_PREFETCH:
-            return self._blob_queue.get()
+            return self._blob_queue[self._cur_roidb_index].get()
         else:
             db_inds = self._get_next_minibatch_inds()
-            minibatch_db = [self._roidb[i] for i in db_inds]
+            minibatch_db = [self._roidbs[self._cur_roidb_index][i] for i in db_inds]
+            if self._change==4 :
+                self._change = 0
+                self._cur_roidb_index = 1 if self._cur_roidb_index==0 else 0
+            else :
+                 self._change = (self._change +1 ) %5
             return get_minibatch(minibatch_db, self._num_classes)
 
-    def set_roidb(self, roidb):
+    def set_roidb(self, src_roidb, target_roidb):
         """Set the roidb to be used by this layer during training."""
-        self._roidb = roidb
-        self._shuffle_roidb_inds()
+        self._roidbs = [src_roidb, target_roidb]
+        self._perm = [None,None]
+        self._cur = [0,0]
+        self._change = 5
+        for i in xrange(0,len(self._roidbs)):
+            self._shuffle_roidb_inds(i)
+        # Initially select src roidb index
+        self._cur_roidb_index = 0 
         if cfg.TRAIN.USE_PREFETCH:
-            self._blob_queue = Queue(10)
-            self._prefetch_process = BlobFetcher(self._blob_queue,
-                                                 self._roidb,
-                                                 self._num_classes)
-            self._prefetch_process.start()
-            # Terminate the child process when the parent exists
-            def cleanup():
-                print 'Terminating BlobFetcher'
-                self._prefetch_process.terminate()
-                self._prefetch_process.join()
-            import atexit
-            atexit.register(cleanup)
+            self._blob_queue = []
+            self._prefetch_process = []
+            for i in xrange(0,len(self._roidbs)):
+                self._blob_queue.append(Queue(10))
+                self._prefetch_process.append(BlobFetcher(self._blob_queue[i],
+                                                 self._roidbs[i],
+                                                 self._num_classes))
+                self._prefetch_process[i].start()
+                # Terminate the child process when the parent exists
+                def cleanup():
+                    print 'Terminating BlobFetcher'
+                    self._prefetch_process[i].terminate()
+                    self._prefetch_process[i].join()
+                import atexit
+                atexit.register(cleanup)
 
     def setup(self, bottom, top):
-        """Setup the RoIDataLayer."""
+        """Setup the RoiDualDataLayer."""
 
         # parse the layer parameter string, which must be valid YAML
         layer_params = yaml.load(self.param_str)
@@ -142,7 +153,7 @@ class RoIDataLayer(caffe.Layer):
                 self._name_to_top_map['bbox_outside_weights'] = idx
                 idx += 1
 
-        print 'RoiDataLayer: name_to_top:', self._name_to_top_map
+        print 'RoiDualDataLayer: name_to_top:', self._name_to_top_map
         assert len(top) == len(self._name_to_top_map)
 
     def forward(self, bottom, top):
@@ -163,40 +174,3 @@ class RoIDataLayer(caffe.Layer):
     def reshape(self, bottom, top):
         """Reshaping happens during the call to forward."""
         pass
-
-class BlobFetcher(Process):
-    """Experimental class for prefetching blobs in a separate process."""
-    def __init__(self, queue, roidb, num_classes):
-        super(BlobFetcher, self).__init__()
-        self._queue = queue
-        self._roidb = roidb
-        self._num_classes = num_classes
-        self._perm = None
-        self._cur = 0
-        self._shuffle_roidb_inds()
-        # fix the random seed for reproducibility
-        np.random.seed(cfg.RNG_SEED)
-
-    def _shuffle_roidb_inds(self):
-        """Randomly permute the training roidb."""
-        # TODO(rbg): remove duplicated code
-        self._perm = np.random.permutation(np.arange(len(self._roidb)))
-        self._cur = 0
-
-    def _get_next_minibatch_inds(self):
-        """Return the roidb indices for the next minibatch."""
-        # TODO(rbg): remove duplicated code
-        if self._cur + cfg.TRAIN.IMS_PER_BATCH >= len(self._roidb):
-            self._shuffle_roidb_inds()
-
-        db_inds = self._perm[self._cur:self._cur + cfg.TRAIN.IMS_PER_BATCH]
-        self._cur += cfg.TRAIN.IMS_PER_BATCH
-        return db_inds
-
-    def run(self):
-        print 'BlobFetcher started'
-        while True:
-            db_inds = self._get_next_minibatch_inds()
-            minibatch_db = [self._roidb[i] for i in db_inds]
-            blobs = get_minibatch(minibatch_db, self._num_classes)
-            self._queue.put(blobs)
