@@ -35,7 +35,10 @@ class ProposalTargetLayer(caffe.Layer):
         top[3].reshape(1, self._num_classes * 4)
         # bbox_outside_weights
         top[4].reshape(1, self._num_classes * 4)
-
+        # dc_labels
+        if cfg.TRAIN.IS_ADAPTATION_NETWORK :
+            top[5].reshape(1, 1)
+        
     def forward(self, bottom, top):
         # Proposal ROIs (0, x1, y1, x2, y2) coming from RPN
         # (i.e., rpn.proposal_layer.ProposalLayer), or any other source
@@ -59,11 +62,25 @@ class ProposalTargetLayer(caffe.Layer):
         rois_per_image = cfg.TRAIN.BATCH_SIZE / num_images
         fg_rois_per_image = np.round(cfg.TRAIN.FG_FRACTION * rois_per_image)
 
-        # Sample rois with classification labels and bounding box regression
-        # targets
-        labels, rois, bbox_targets, bbox_inside_weights = _sample_rois(
-            all_rois, gt_boxes, fg_rois_per_image,
-            rois_per_image, self._num_classes)
+        if cfg.TRAIN.IS_ADAPTATION_NETWORK :
+            assert len(bottom) >= 2 ,\
+                "This layer should have domain label to assign each rois"
+            dc_label = bottom[2].data[0,:]
+
+        if cfg.TRAIN.IS_ADAPTATION_NETWORK and dc_label == 1 :
+            rois = all_rois
+            # fake data
+            labels = np.zeros((all_rois.shape[0],1),np.float32)
+            bbox_targets = np.zeros((all_rois.shape[0], 4 * self._num_classes), dtype=np.float32)
+            bbox_inside_weights = np.zeros(bbox_targets.shape, dtype=np.float32)
+                # bbox_outside_weights =
+        else :
+            # Sample rois with classification labels and bounding box regression
+            # targets
+            labels, rois, bbox_targets, bbox_inside_weights = _sample_rois(
+                all_rois, gt_boxes, fg_rois_per_image,
+                rois_per_image, self._num_classes)
+            # bbox_outside_weights=np.array(bbox_inside_weights > 0).astype(np.float32)
 
         if DEBUG:
             print 'num fg: {}'.format((labels > 0).sum())
@@ -94,6 +111,12 @@ class ProposalTargetLayer(caffe.Layer):
         # bbox_outside_weights
         top[4].reshape(*bbox_inside_weights.shape)
         top[4].data[...] = np.array(bbox_inside_weights > 0).astype(np.float32)
+        
+        # dc_labels
+        if cfg.TRAIN.IS_ADAPTATION_NETWORK :
+            dc_labels = np.full((labels.shape[0],1),dc_label,dtype=np.uint)
+            top[5].reshape(*(dc_labels.shape))
+            top[5].data[...] = dc_labels
 
     def backward(self, top, propagate_down, bottom):
         """This layer does not propagate gradients."""

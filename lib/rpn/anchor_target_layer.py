@@ -81,6 +81,9 @@ class AnchorTargetLayer(caffe.Layer):
         # im_info
         im_info = bottom[2].data[0, :]
 
+        if cfg.TRAIN.IS_ADAPTATION_NETWORK : dc_label = bottom[-1].data[0, :]
+
+
         if DEBUG:
             print ''
             print 'im_size: ({}, {})'.format(im_info[0], im_info[1])
@@ -88,6 +91,21 @@ class AnchorTargetLayer(caffe.Layer):
             print 'height, width: ({}, {})'.format(height, width)
             print 'rpn: gt_boxes.shape', gt_boxes.shape
             print 'rpn: gt_boxes', gt_boxes
+        
+        A = self._num_anchors
+
+        # in an adaptation network , when target image seen, reshape but do nothing
+        if cfg.TRAIN.IS_ADAPTATION_NETWORK and dc_label[0]== 1 :
+            # labels
+            top[0].reshape(1, 1, A * height, width)
+            # bbox_targets
+            top[1].reshape(1, A * 4, height, width)
+            # bbox_inside_weights
+            top[2].reshape(1, A * 4, height, width)
+            # bbox_outside_weights
+            top[3].reshape(1, A * 4, height, width)
+
+            return
 
         # 1. Generate proposals from bbox deltas and shifted anchors
         shift_x = np.arange(0, width) * self._feat_stride
@@ -99,7 +117,6 @@ class AnchorTargetLayer(caffe.Layer):
         # cell K shifts (K, 1, 4) to get
         # shift anchors (K, A, 4)
         # reshape to (K*A, 4) shifted anchors
-        A = self._num_anchors
         K = shifts.shape[0]
         all_anchors = (self._anchors.reshape((1, A, 4)) +
                        shifts.reshape((1, K, 4)).transpose((1, 0, 2)))
