@@ -11,6 +11,7 @@ __sets = {}
 
 from datasets.pascal_voc import pascal_voc
 from datasets.coco import coco
+from datasets.minicoco import minicoco
 import numpy as np
 
 # Set up voc_<year>_<split> using selective search "fast" mode
@@ -25,10 +26,22 @@ for year in ['2014']:
         name = 'coco_{}_{}'.format(year, split)
         __sets[name] = (lambda split=split, year=year: coco(split, year))
 
+# Set up minicoco_2014_<split>
+for year in ['2014']:
+    for split in ['train', 'val', 'minival', 'valminusminival','test']:
+        name = 'minicoco_{}_{}'.format(year, split)
+        __sets[name] = (lambda split=split, year=year: minicoco(split, year))
+
 # Set up coco_2015_<split>
 for year in ['2015']:
     for split in ['test', 'test-dev']:
         name = 'coco_{}_{}'.format(year, split)
+        __sets[name] = (lambda split=split, year=year: coco(split, year))
+
+# Set up minicoco_2015_<split>
+for year in ['2015']:
+    for split in ['test', 'test-dev']:
+        name = 'minicoco_{}_{}'.format(year, split)
         __sets[name] = (lambda split=split, year=year: coco(split, year))
 
 def get_imdb(name):
