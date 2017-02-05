@@ -51,7 +51,8 @@ class DASolverWrapper(SolverWrapper):
             pb2.text_format.Merge(f.read(), self.solver_param)
         
         
-        self.solver.net.layers[0].set_roidb(src_roidb,target_roidb)
+        self.solver.net.layers[0].set_roidb(src_roidb)
+        self.solver.net.layers[4].set_roidb(target_roidb)
 
 def train_net(solver_prototxt, src_roidb, target_roidb, output_dir,
               pretrained_model=None, max_iters=40000):
