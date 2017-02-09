@@ -105,7 +105,7 @@ class RoIDataLayer(caffe.Layer):
             self._name_to_top_map['gt_boxes'] = idx
             idx += 1
             
-            if cfg.TRAIN.IS_ADAPTATION_NETWORK :
+            if cfg.TRAIN.IS_ADAPTATION_NETWORK and cfg.TRAIN.ADAPTATION_LOSS == 'DC_LOSS':
                 # dc_label blob : holds a batch of N images, each with 1 domain label
                 top[idx].reshape(cfg.TRAIN.IMS_PER_BATCH, 1)
                 self._name_to_top_map['dc_label'] = idx

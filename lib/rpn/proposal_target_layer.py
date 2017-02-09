@@ -36,7 +36,7 @@ class ProposalTargetLayer(caffe.Layer):
         # bbox_outside_weights
         top[4].reshape(1, self._num_classes * 4)
         # dc_labels
-        if cfg.TRAIN.IS_ADAPTATION_NETWORK :
+        if cfg.TRAIN.IS_ADAPTATION_NETWORK and cfg.TRAIN.ADAPTATION_LOSS == 'DC_LOSS':
             top[5].reshape(1, 1)
         
     def forward(self, bottom, top):
@@ -61,13 +61,13 @@ class ProposalTargetLayer(caffe.Layer):
         num_images = 1
         rois_per_image = cfg.TRAIN.BATCH_SIZE / num_images
         fg_rois_per_image = np.round(cfg.TRAIN.FG_FRACTION * rois_per_image)
-
-        if cfg.TRAIN.IS_ADAPTATION_NETWORK :
+        
+        if cfg.TRAIN.IS_ADAPTATION_NETWORK and cfg.TRAIN.ADAPTATION_LOSS == 'DC_LOSS':
             assert len(bottom) >= 2 ,\
                 "This layer should have domain label to assign each rois"
             dc_label = bottom[2].data[0,:]
 
-        if cfg.TRAIN.IS_ADAPTATION_NETWORK and dc_label == 1 :
+        if cfg.TRAIN.IS_ADAPTATION_NETWORK and cfg.TRAIN.ADAPTATION_LOSS == 'DC_LOSS'and dc_label == 1 :
             rois = all_rois
             # fake data
             labels = np.zeros((all_rois.shape[0],1),np.float32)
@@ -113,7 +113,7 @@ class ProposalTargetLayer(caffe.Layer):
         top[4].data[...] = np.array(bbox_inside_weights > 0).astype(np.float32)
         
         # dc_labels
-        if cfg.TRAIN.IS_ADAPTATION_NETWORK :
+        if cfg.TRAIN.IS_ADAPTATION_NETWORK and cfg.TRAIN.ADAPTATION_LOSS == 'DC_LOSS':
             dc_labels = np.full((labels.shape[0],1),dc_label,dtype=np.uint)
             top[5].reshape(*(dc_labels.shape))
             top[5].data[...] = dc_labels

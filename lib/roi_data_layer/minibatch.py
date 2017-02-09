@@ -34,11 +34,11 @@ def get_minibatch(roidb, num_classes):
         assert len(im_scales) == 1, "Single batch only"
         assert len(roidb) == 1, "Single batch only"
         # dc_label : (n,domain)
-        if cfg.TRAIN.IS_ADAPTATION_NETWORK:
+        if cfg.TRAIN.IS_ADAPTATION_NETWORK and cfg.TRAIN.ADAPTATION_LOSS == 'DC_LOSS':
             blobs['dc_label'] = np.array([[roidb[0]['domain']]],dtype=np.float32)
             # print "Domain label %d"%roidb[0]['domain']
         # gt boxes: (x1, y1, x2, y2, cls)
-        if cfg.TRAIN.IS_ADAPTATION_NETWORK and roidb[0]['domain']== 1 :
+        if cfg.TRAIN.IS_ADAPTATION_NETWORK and cfg.TRAIN.ADAPTATION_LOSS == 'DC_LOSS' and roidb[0]['domain']== 1 :
                 gt_boxes = np.empty((0, 5), dtype=np.float32)
                 blobs['gt_boxes'] = gt_boxes
         else :

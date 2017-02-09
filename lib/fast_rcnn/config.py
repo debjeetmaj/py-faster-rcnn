@@ -125,7 +125,7 @@ __C.TRAIN.RPN_POSITIVE_WEIGHT = -1.0
 
 #adaptation Network
 __C.TRAIN.IS_ADAPTATION_NETWORK = False
-
+__C.TRAIN.ADAPTATION_LOSS = 'DC_LOSS'
 #
 # Testing options
 #

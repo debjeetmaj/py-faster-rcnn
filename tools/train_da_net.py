@@ -101,11 +101,13 @@ if __name__ == '__main__':
 
     target_imdb,target_roidb = combined_target_roidb(args.target_imdb_name)
     print '{:d} target roidb entries'.format(len(target_roidb))
-    add_domain_label(target_roidb,1)
+    
 
     src_imdb, src_roidb = combined_roidb(args.src_imdb_name)
     print '{:d} source roidb entries'.format(len(src_roidb))
-    add_domain_label(src_roidb,0)
+    if cfg.TRAIN.IS_ADAPTATION_NETWORK and cfg.TRAIN.ADAPTATION_LOSS == 'DC_LOSS':
+        add_domain_label(target_roidb,1)
+        add_domain_label(src_roidb,0)
 
     # #merge roidbs
     # roidb = merge_roidbs(src_roidb,target_roidb)
