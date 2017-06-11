@@ -123,9 +123,15 @@ __C.TRAIN.RPN_BBOX_INSIDE_WEIGHTS = (1.0, 1.0, 1.0, 1.0)
 # Set to -1.0 to use uniform example weighting
 __C.TRAIN.RPN_POSITIVE_WEIGHT = -1.0
 
-#adaptation Network
+# Use Enhancement Strategies like Contrast, Brightness and Color
+__C.TRAIN.USE_RANDOM_ENHANCEMENT = True
+
+# adaptation Network
 __C.TRAIN.IS_ADAPTATION_NETWORK = False
 __C.TRAIN.ADAPTATION_LOSS = 'DC_LOSS'
+
+__C.TRAIN.RANDOM_SUBSAMPLE = False
+__C.TRAIN.RANDOM_SUBSAMPLE_SIZE = 9000
 #
 # Testing options
 #
@@ -209,6 +215,10 @@ __C.USE_GPU_NMS = True
 # Default GPU device id
 __C.GPU_ID = 0
 
+# PCA value of PASCAL_VOC (sqrt(eigen_val) * eigen_vector)
+__C.PCA_VALUE = np.asarray([[-0.02277082 , 0.08246639 ,-0.27069403],
+ [ 0.04189001 , 0.00302732, -0.26898064],
+ [-0.01965298, -0.08909651, -0.25968975]])
 
 def get_output_dir(imdb, net=None):
     """Return the directory where experimental artifacts are placed.

@@ -11,6 +11,7 @@ from fast_rcnn.train_da import train_net
 from fast_rcnn.config import cfg, cfg_from_file, cfg_from_list, get_output_dir
 from datasets.factory import get_imdb
 import datasets.imdb
+import os
 import caffe
 import argparse
 import pprint
@@ -33,6 +34,9 @@ def parse_args():
                         help='number of iterations to train',
                         default=40000, type=int)
     parser.add_argument('--weights', dest='pretrained_model',
+                        help='initialize with pretrained model weights',
+                        default=None, type=str)
+    parser.add_argument('--gan_weights', dest='pretrained_gan_model',
                         help='initialize with pretrained model weights',
                         default=None, type=str)
     parser.add_argument('--cfg', dest='cfg_file',
@@ -94,28 +98,60 @@ if __name__ == '__main__':
         # fix the random seeds (numpy and caffe) for reproducibility
         np.random.seed(cfg.RNG_SEED)
         caffe.set_random_seed(cfg.RNG_SEED)
-
+    
     # set up caffe
     caffe.set_mode_gpu()
     caffe.set_device(args.gpu_id)
 
-    target_imdb,target_roidb = combined_target_roidb(args.target_imdb_name)
-    print '{:d} target roidb entries'.format(len(target_roidb))
-    
+    if not cfg.TRAIN.IS_ADAPTATION_NETWORK :
+        print "Configuration for adaptation network not set, Please check."
+        sys.exit(1) 
 
-    src_imdb, src_roidb = combined_roidb(args.src_imdb_name)
-    print '{:d} source roidb entries'.format(len(src_roidb))
-    if cfg.TRAIN.IS_ADAPTATION_NETWORK and cfg.TRAIN.ADAPTATION_LOSS == 'DC_LOSS':
+    if cfg.TRAIN.ADAPTATION_LOSS == 'DC_LOSS':
+
+        target_imdb,target_roidb = combined_target_roidb(args.target_imdb_name)
+        print '{:d} target roidb entries'.format(len(target_roidb))
+        
+        src_imdb, src_roidb = combined_roidb(args.src_imdb_name)
+        print '{:d} source roidb entries'.format(len(src_roidb))
+
         add_domain_label(target_roidb,1)
         add_domain_label(src_roidb,0)
-
-    # #merge roidbs
-    # roidb = merge_roidbs(src_roidb,target_roidb)
-    # print '{:d} Total roidb entries'.format(len(roidb))
     
-    output_dir = get_output_dir(target_imdb)
-    print 'Output will be saved to `{:s}`'.format(output_dir)
+        output_dir = get_output_dir(target_imdb)
+        print 'Output will be saved to `{:s}`'.format(output_dir)
 
-    train_net(args.solver, src_roidb, target_roidb, output_dir,
-                pretrained_model=args.pretrained_model,
-                max_iters=args.max_iters)
+        train_net(args.solver, src_roidb, target_roidb, output_dir,
+                    pretrained_model=args.pretrained_model,
+                    max_iters=args.max_iters)
+
+    elif cfg.TRAIN.ADAPTATION_LOSS == 'GAN_LOSS':
+        assert args.pretrained_gan_model
+        src_imdb, src_roidb = combined_roidb(args.src_imdb_name)
+        print '{:d} source roidb entries'.format(len(src_roidb))
+
+        output_dir = get_output_dir(src_imdb)
+        print 'Output will be saved to `{:s}`'.format(output_dir)
+
+        train_net(args.solver, src_roidb,None, output_dir,
+                    pretrained_model=[args.pretrained_model,args.pretrained_gan_model],
+                    max_iters=args.max_iters)
+        # train_net(args.solver, src_roidb,None, output_dir,
+        #             pretrained_model=args.pretrained_model,
+        #             max_iters=args.max_iters)
+        # train_net(args.solver, src_roidb,None, output_dir,
+        #             pretrained_model=args.pretrained_gan_model,
+        #             max_iters=args.max_iters)
+    else :
+        target_imdb,target_roidb = combined_target_roidb(args.target_imdb_name)
+        print '{:d} target roidb entries'.format(len(target_roidb))
+        
+        src_imdb, src_roidb = combined_roidb(args.src_imdb_name)
+        print '{:d} source roidb entries'.format(len(src_roidb))
+
+        output_dir = get_output_dir(target_imdb)
+        print 'Output will be saved to `{:s}`'.format(output_dir)
+
+        train_net(args.solver, src_roidb, target_roidb, output_dir,
+                    pretrained_model=args.pretrained_model,
+                    max_iters=args.max_iters)

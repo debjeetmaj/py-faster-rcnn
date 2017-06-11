@@ -105,6 +105,13 @@ class minicoco(imdb):
         for i in cocoCatIds :
             s|=Set(self._COCO.getImgIds(catIds=i))
         image_ids = list(s)
+        #subsample
+        if cfg.TRAIN.RANDOM_SUBSAMPLE :
+            # print "Subsampling the training set"
+            image_ids = np.asarray(image_ids)
+            image_ids = image_ids[np.random.permutation(len(image_ids))[0:cfg.TRAIN.RANDOM_SUBSAMPLE_SIZE]]
+            image_ids = list(image_ids) 
+
         assert len(image_ids) > 0 , "Atleast 1 image should be present"
         return image_ids
 

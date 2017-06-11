@@ -9,6 +9,15 @@
 
 import numpy as np
 import cv2
+from fast_rcnn.config import cfg
+from PIL import ImageEnhance
+from PIL import Image
+
+def normalize_image(im):
+    """Change in range [-1,1]"""
+    im *= (2.0/255.0)
+    im -= 1
+    return im
 
 def im_list_to_blob(ims):
     """Convert a list of images into a network input.
@@ -28,10 +37,32 @@ def im_list_to_blob(ims):
     blob = blob.transpose(channel_swap)
     return blob
 
-def prep_im_for_blob(im, pixel_means, target_size, max_size):
+def prep_im_for_blob(im, pixel_means, target_size, max_size,perturb=None,normalize=False):
     """Mean subtract and scale an image for use in a blob."""
+    if cfg.TRAIN.USE_RANDOM_ENHANCEMENT :
+        # TODO : see same operations in opencv
+        # convert to RGB
+        imobj = Image.fromarray(im[:,:,[2,1,0]])
+        enhancers = [ImageEnhance.Color, ImageEnhance.Brightness, ImageEnhance.Contrast]
+        enhance_value = np.random.rand(len(enhancers)) + .5 
+        enhancer_order = np.random.permutation(np.arange(len(enhancers)))
+        for i in xrange(len(enhancers)):
+            enhancer = enhancers[i](imobj)
+            imobj = enhancer.enhance(enhance_value[enhancer_order[i]])
+        im = np.asarray(imobj)
+        # convert back to BGR
+        im = im[:,:,[2,1,0]]
+        # add lighting noise
+        im = im.astype(np.float32, copy=False)
+        im += perturb
+        im[im>255] = 255
+        im[im<0] = 0    
+
     im = im.astype(np.float32, copy=False)
-    im -= pixel_means
+    if normalize :
+        im = normalize_image(im)
+    else :
+        im -= pixel_means
     im_shape = im.shape
     im_size_min = np.min(im_shape[0:2])
     im_size_max = np.max(im_shape[0:2])

@@ -13,7 +13,7 @@ import cv2
 from fast_rcnn.config import cfg
 from utils.blob import prep_im_for_blob, im_list_to_blob
 
-def get_minibatch(roidb, num_classes):
+def get_minibatch(roidb, num_classes,perturb=None):
     """Given a roidb, construct a minibatch sampled from it."""
     num_images = len(roidb)
     # Sample random scales to use for each image in this batch
@@ -25,18 +25,32 @@ def get_minibatch(roidb, num_classes):
     rois_per_image = cfg.TRAIN.BATCH_SIZE / num_images
     fg_rois_per_image = np.round(cfg.TRAIN.FG_FRACTION * rois_per_image)
 
-    # Get the input image blob, formatted for caffe
-    im_blob, im_scales = _get_image_blob(roidb, random_scale_inds)
-
+    im_blob, im_scales = _get_image_blob(roidb, random_scale_inds,perturb=perturb)
+    
     blobs = {'data': im_blob}
+
+    # Get the input image blob, formatted for caffe
+    if cfg.TRAIN.IS_ADAPTATION_NETWORK and cfg.TRAIN.ADAPTATION_LOSS == 'GAN_LOSS':
+        im_blob1, _ = _get_image_blob(roidb, random_scale_inds,normalize=True)
+        blobs['Ndata'] = im_blob1
+        # print im_blob.shape,im_blob1.shape
+        # im_blob = np.concatenate((im_blob,im_blob1))        
 
     if cfg.TRAIN.HAS_RPN:
         assert len(im_scales) == 1, "Single batch only"
         assert len(roidb) == 1, "Single batch only"
         # dc_label : (n,domain)
-        if cfg.TRAIN.IS_ADAPTATION_NETWORK and cfg.TRAIN.ADAPTATION_LOSS == 'DC_LOSS':
-            blobs['dc_label'] = np.array([[roidb[0]['domain']]],dtype=np.float32)
-            # print "Domain label %d"%roidb[0]['domain']
+        if cfg.TRAIN.IS_ADAPTATION_NETWORK :
+            if cfg.TRAIN.ADAPTATION_LOSS == 'DC_LOSS' :
+                blobs['dc_label'] = np.array([[roidb[0]['domain']]],dtype=np.float32)
+                # print "Domain label %d"%roidb[0]['domain']
+            # elif cfg.TRAIN.ADAPTATION_LOSS == 'GAN_LOSS' :
+            #     #normalize the im_blob in range [-1, 1]
+            #     # print "blob2"
+            #     im_blob = im_blob * (2.0/255.0)
+            #     im_blob -= 1
+            #     blobs['data'] = im_blob
+
         # gt boxes: (x1, y1, x2, y2, cls)
         if cfg.TRAIN.IS_ADAPTATION_NETWORK and cfg.TRAIN.ADAPTATION_LOSS == 'DC_LOSS' and roidb[0]['domain']== 1 :
                 gt_boxes = np.empty((0, 5), dtype=np.float32)
@@ -135,7 +149,7 @@ def _sample_rois(roidb, fg_rois_per_image, rois_per_image, num_classes):
 
     return labels, overlaps, rois, bbox_targets, bbox_inside_weights
 
-def _get_image_blob(roidb, scale_inds):
+def _get_image_blob(roidb, scale_inds,perturb=None,normalize=False):
     """Builds an input blob from the images in the roidb at the specified
     scales.
     """
@@ -148,7 +162,7 @@ def _get_image_blob(roidb, scale_inds):
             im = im[:, ::-1, :]
         target_size = cfg.TRAIN.SCALES[scale_inds[i]]
         im, im_scale = prep_im_for_blob(im, cfg.PIXEL_MEANS, target_size,
-                                        cfg.TRAIN.MAX_SIZE)
+                                        cfg.TRAIN.MAX_SIZE,perturb=perturb,normalize=normalize)
         im_scales.append(im_scale)
         processed_ims.append(im)
 

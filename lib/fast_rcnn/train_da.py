@@ -13,7 +13,7 @@ from train import SolverWrapper,filter_roidb
 import roi_data_layer.roidb as rdl_roidb
 from utils.timer import Timer
 import numpy as np
-import os
+import os,cv2
 
 from caffe.proto import caffe_pb2
 import google.protobuf as pb2
@@ -42,9 +42,15 @@ class DASolverWrapper(SolverWrapper):
 
         self.solver = caffe.SGDSolver(solver_prototxt)
         if pretrained_model is not None:
-            print ('Loading pretrained model '
-                   'weights from {:s}').format(pretrained_model)
-            self.solver.net.copy_from(pretrained_model)
+            if type(pretrained_model) == type([]):
+                for p_model in pretrained_model:
+                    print ('Loading pretrained model '
+                        'weights from {:s}').format(p_model)
+                    self.solver.net.copy_from(p_model)
+            else :
+                print ('Loading pretrained model '
+                    'weights from {:s}').format(pretrained_model)
+                self.solver.net.copy_from(pretrained_model)
 
         self.solver_param = caffe_pb2.SolverParameter()
         with open(solver_prototxt, 'rt') as f:
@@ -52,8 +58,10 @@ class DASolverWrapper(SolverWrapper):
         
         
         self.solver.net.layers[0].set_roidb(src_roidb)
-        self.solver.net.layers[4].set_roidb(target_roidb)
-
+        if cfg.TRAIN.ADAPTATION_LOSS in ['DC_LOSS', 'MMD_LOSS', 'CORAL_LOSS']:
+            assert target_roidb , "target_roidb not initialized"
+            self.solver.net.layers[4].set_roidb(target_roidb)
+    
 def train_net(solver_prototxt, src_roidb, target_roidb, output_dir,
               pretrained_model=None, max_iters=40000):
     """Train a Fast R-CNN network."""

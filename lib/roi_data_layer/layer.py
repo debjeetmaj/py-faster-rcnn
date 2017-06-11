@@ -38,6 +38,9 @@ class RoIDataLayer(caffe.Layer):
             self._perm = inds
         else:
             self._perm = np.random.permutation(np.arange(len(self._roidb)))
+        if cfg.TRAIN.USE_RANDOM_ENHANCEMENT :
+            # draw alpha to be multiplied
+            self._perturb = ((cfg.PCA_VALUE * np.random.randn(3) * 0.1).sum(axis=1) * 255).reshape((1,1,3))
         self._cur = 0
 
     def _get_next_minibatch_inds(self):
@@ -60,12 +63,16 @@ class RoIDataLayer(caffe.Layer):
         else:
             db_inds = self._get_next_minibatch_inds()
             minibatch_db = [self._roidb[i] for i in db_inds]
-            return get_minibatch(minibatch_db, self._num_classes)
+            if cfg.TRAIN.USE_RANDOM_ENHANCEMENT :
+                return get_minibatch(minibatch_db, self._num_classes,perturb=self._perturb)
+            else :
+                return get_minibatch(minibatch_db, self._num_classes)
 
     def set_roidb(self, roidb):
         """Set the roidb to be used by this layer during training."""
         self._roidb = roidb
         self._shuffle_roidb_inds()
+    
         if cfg.TRAIN.USE_PREFETCH:
             self._blob_queue = Queue(10)
             self._prefetch_process = BlobFetcher(self._blob_queue,
@@ -105,11 +112,18 @@ class RoIDataLayer(caffe.Layer):
             self._name_to_top_map['gt_boxes'] = idx
             idx += 1
             
-            if cfg.TRAIN.IS_ADAPTATION_NETWORK and cfg.TRAIN.ADAPTATION_LOSS == 'DC_LOSS':
-                # dc_label blob : holds a batch of N images, each with 1 domain label
-                top[idx].reshape(cfg.TRAIN.IMS_PER_BATCH, 1)
-                self._name_to_top_map['dc_label'] = idx
-                idx += 1
+            if cfg.TRAIN.IS_ADAPTATION_NETWORK :
+                if cfg.TRAIN.ADAPTATION_LOSS == 'DC_LOSS' :
+                    # dc_label blob : holds a batch of N images, each with 1 domain label
+                    top[idx].reshape(cfg.TRAIN.IMS_PER_BATCH, 1)
+                    self._name_to_top_map['dc_label'] = idx
+                    idx += 1
+                elif cfg.TRAIN.ADAPTATION_LOSS == 'GAN_LOSS' :
+                    # data : holds a batch of N images, normalized in range [-1,1]
+                    top[idx].reshape(cfg.TRAIN.IMS_PER_BATCH, 3,
+                        max(cfg.TRAIN.SCALES), cfg.TRAIN.MAX_SIZE)
+                    self._name_to_top_map['Ndata'] = idx
+                    idx += 1
 
         else: # not using RPN
             # rois blob: holds R regions of interest, each is a 5-tuple
